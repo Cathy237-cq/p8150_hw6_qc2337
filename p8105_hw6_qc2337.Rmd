@@ -1,0 +1,121 @@
+---
+title: "p8105_hw6_qc2337"
+output: github_document
+---
+
+```{r}
+library(tidyverse)
+library(p8105.datasets)
+library(ggplot2)
+set.seed(1)
+```
+
+
+# Problem 2
+```{r}
+ homicide_df =  
+   read_csv("data/homicide_data.csv", na = c("NA","Unknown",".","")) |> 
+   janitor::clean_names()
+```
+
+create "city_state" variable, filter specific cities and restrict the race, edit the age type.
+```{r}
+ homicide_clean_df = 
+  homicide_df |> 
+  mutate(
+    city_state = paste(city, state, sep = ", "),
+    solved = ifelse(disposition == "Closed by arrest", 1, 0),
+    victim_age = as.numeric(victim_age) 
+  ) |> 
+  filter(
+    !city_state %in% c("Dallas, TX", "Phoenix, AZ", "Kansas City, MO", "Tulsa, AL"),  
+    victim_race %in% c("White", "Black")  
+  )
+```
+
+fit a logistic regression for city of Baltimore
+```{r}
+baltimore_df = 
+  homicide_clean_df |> 
+  filter(city_state == "Baltimore, MD")
+
+fit_logistic = glm(
+  solved ~ victim_age + victim_sex + victim_race, data = baltimore_df, family = binomial())
+
+fit_logistic |> 
+  broom::tidy(conf.int = TRUE) |> 
+  filter(term == "victim_sexMale") |> 
+  mutate(
+    OR = exp(estimate),
+    CI_low = exp(conf.low),
+    CI_high = exp(conf.high)
+     ) |> 
+  select(OR, CI_low, CI_high) |> 
+  knitr::kable(digits = 3)
+```
+From the table we know that the adjusted odds ratio is 0.426, the 95%CI for solving homicides comparing male victims to female victims lies between (0.324, 0.558).
+
+
+run GLM for each city.
+```{r}
+fit_logistic_eachcity = function(data) {
+  glm_results = glm(solved ~ victim_age + victim_sex + victim_race, data = data, family = binomial())  |> 
+    broom::tidy(conf.int = TRUE) |> 
+    filter(term == "victim_sexMale") |> 
+    mutate(
+     OR = exp(estimate),
+     CI_low = exp(conf.low),
+     CI_high = exp(conf.high)
+   )
+   
+    data.frame(
+    city_state = unique(data$city_state),
+    OR = glm_results$OR,
+    CI_low = glm_results$CI_low,
+    CI_high = glm_results$CI_high
+  )
+}
+  
+results = homicide_clean_df |> 
+  group_by(city_state) |> 
+  group_split() |> 
+  map_df(fit_logistic_eachcity) 
+
+print(results)
+```
+
+
+Create a plot
+```{r}
+results_plot = results |> 
+  arrange(OR) |> 
+  mutate(city_state = fct_inorder(city_state))
+
+results_plot |> 
+  ggplot(aes(x = city_state, y = OR)) +
+  geom_point() + 
+  geom_errorbar(aes(ymin = CI_low, ymax = CI_high), width = 0.2) +
+  coord_flip() + 
+  labs(
+    title = "Estimated Odds Ratios and Confidence Intervals by City",
+    x = "City",
+    y = "Odds Ratio"
+  ) +
+  theme_minimal()
+
+```
+Comment: Those cities with OR larger than 1, indicates that no significant difference in solving rates between male and female victims.The Albuguergue, NM has the highest OR and widest 95% CI.Other cities have an apparenthigh OR>1 are Stockton,CA and Fresno,CA.
+
+# Problem 3
+```{r}
+ homicide_df =  
+   read_csv("data/birthweight.csv", na = c("NA",".","")) |> 
+   janitor::clean_names()
+```
+
+
+
+
+
+
+
